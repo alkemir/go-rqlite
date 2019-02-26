@@ -1,7 +1,9 @@
 package rqlite
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -136,4 +138,27 @@ type Sqlite3Status struct {
 	FKConstraints string
 	Path          string
 	Version       string
+}
+
+func (db *DB) Status() (*ClusterStatus, error) {
+	pp := db.cluster.PeerList()
+	if len(pp) < 1 {
+		return nil, ErrNoPeers
+	}
+
+	for _, p := range pp {
+		resp, err := db.request(apiSTATUS, http.MethodGet, p, nil)
+		if err != nil {
+			continue
+		}
+
+		clStatus := ClusterStatus{}
+		if err = json.Unmarshal(resp, &clStatus); err != nil {
+			return nil, err
+		}
+
+		return &clStatus, nil
+	}
+
+	return nil, ErrPeersUnavailable
 }

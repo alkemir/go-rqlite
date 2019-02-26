@@ -19,7 +19,7 @@ func TestCreateWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := db.Execute([]string{"CREATE TABLE foo (id integer not null primary key, name text)"})
+	res, err := db.Execute([]string{"CREATE TABLE IF NOT EXISTS foo (id integer not null primary key, name text)"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,9 +39,14 @@ func TestCreateWriteRead(t *testing.T) {
 		}
 	}
 
-	_, err = db.Query([]string{"SELECT * FROM foo"})
+	resQ, err := db.Query([]string{"SELECT * FROM foo"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	for _, r := range resQ.Results {
+		if r.Err != "" {
+			t.Fatal(r.Err)
+		}
+	}
 }
