@@ -19,18 +19,29 @@ func TestCreateWriteRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := db.Write([]string{"CREATE TABLE foo (id integer not null primary key, name text)"})
+	res, err := db.Execute([]string{"CREATE TABLE foo (id integer not null primary key, name text)"})
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, r := range res.Results {
+		if r.Err != "" {
+			t.Fatal(r.Err)
+		}
+	}
 
-	_, err = db.Write([]string{"INSERT INTO foo VALUES(1, 'one')"})
+	res, err = db.Execute([]string{"INSERT INTO foo VALUES(1, 'one')"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, r := range res.Results {
+		if r.Err != "" {
+			t.Fatal(r.Err)
+		}
 	}
 
 	_, err = db.Query([]string{"SELECT * FROM foo"})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 }

@@ -165,7 +165,25 @@ func (db *DB) Status() (*ClusterStatus, error) {
 	return nil, ErrPeersUnavailable
 }
 
-func (db *DB) Write(sqlStatements []string) ([]byte, error) {
+type ExecuteResponse struct {
+	Results []ExecuteResult
+	Timing  float64 `json:"time"`
+	Raft    RaftResponse
+}
+
+type RaftResponse struct {
+	Index  int
+	NodeID string `json:"node_id"`
+}
+
+type ExecuteResult struct {
+	Err          string  `json:"error"` // TODO (br): Maybe this should be an error
+	LastInsertID int     `json:"last_insert_id"`
+	RowsAffected int     `json:"rows_affected"`
+	Timing       float64 `json:"time"`
+}
+
+func (db *DB) Execute(sqlStatements []string) (*ExecuteResponse, error) {
 	jStatements, err := json.Marshal(sqlStatements)
 	if err != nil {
 		return nil, err
@@ -182,7 +200,12 @@ func (db *DB) Write(sqlStatements []string) ([]byte, error) {
 			continue
 		}
 
-		return resp, nil
+		ret := &ExecuteResponse{}
+		if err = json.Unmarshal(resp, ret); err != nil { // TODO (br): use json.Decode and read directly from Body
+			continue
+		}
+
+		return ret, nil
 	}
 
 	return nil, ErrPeersUnavailable

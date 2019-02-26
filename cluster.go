@@ -21,10 +21,7 @@ type Peer struct {
 func (c *Cluster) PeerList() []Peer {
 	pp := make([]Peer, 0, len(c.otherPeers)+1)
 	pp = append(pp, c.leader)
-	for _, p := range c.otherPeers {
-		pp = append(pp, p)
-	}
-
+	pp = append(pp, c.otherPeers...)
 	return pp
 }
 
