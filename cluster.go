@@ -2,28 +2,19 @@ package rqlite
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 )
 
-type Cluster struct {
-	leader     Peer
-	otherPeers []Peer
+type cluster struct {
+	peers []*peer // leader first
 }
 
-type Peer struct {
-	hostname string
-	port     string
-}
-
-// TODO(br): Cache this result to avoid allocating each time
-// TODO(br): See whether using pointers would be safe
-func (c *Cluster) PeerList() []Peer {
-	pp := make([]Peer, 0, len(c.otherPeers)+1)
-	pp = append(pp, c.leader)
-	pp = append(pp, c.otherPeers...)
+func (db *DB) PeerList() []*peer {
+	db.clusterMu.Lock()
+	pp := db.cluster.peers
+	db.clusterMu.Unlock()
 	return pp
 }
 
@@ -34,26 +25,32 @@ func (db *DB) updateClusterInfo() error {
 	}
 
 	leaderRaftAddr := status.Store.Leader
-	nc := Cluster{}
+
+	var leader *peer
+	var otherPeers []*peer
 
 	for raftAddr, httpAddr := range status.Store.Meta.APIPeers {
-		var p Peer
-		parts := strings.Split(httpAddr, ":")
-		p.hostname = parts[0]
-		p.port = parts[1]
+		hostPort := strings.Split(httpAddr, ":")
+		p := db.newPeer(hostPort[0], hostPort[1])
 
 		if leaderRaftAddr == raftAddr {
-			nc.leader = p
+			leader = p
 		} else {
-			nc.otherPeers = append(nc.otherPeers, p)
+			otherPeers = append(otherPeers, p)
 		}
 	}
 
-	if nc.leader.hostname == "" {
-		return errors.New("could not determine leader from API status call")
+	if leader == nil {
+		return ErrLeaderNotFound
 	}
 
-	db.cluster = nc
+	pp := make([]*peer, 0, len(otherPeers)+1)
+	pp = append(pp, leader)
+	pp = append(pp, otherPeers...)
+
+	db.clusterMu.Lock()
+	db.cluster = cluster{peers: pp}
+	db.clusterMu.Unlock()
 	return nil
 }
 
@@ -141,13 +138,13 @@ type Sqlite3Status struct {
 }
 
 func (db *DB) Status() (*ClusterStatus, error) {
-	pp := db.cluster.PeerList()
+	pp := db.PeerList()
 	if len(pp) < 1 {
 		return nil, ErrNoPeers
 	}
 
 	for _, p := range pp {
-		resp, err := db.request(apiSTATUS, http.MethodGet, p, nil)
+		resp, err := db.request(opSTATUS, false, http.MethodGet, p, nil)
 		if err != nil {
 			continue
 		}

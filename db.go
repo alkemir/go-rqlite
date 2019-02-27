@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,8 +22,10 @@ type DB struct {
 	user       string
 	password   string
 
-	cluster Cluster
-	level   consistencyLevel
+	cluster   cluster
+	clusterMu sync.Mutex
+
+	level consistencyLevel
 }
 
 // Open database and return a new connection.
@@ -92,8 +95,8 @@ func Open(dsn string) (*DB, error) {
 		password:   password,
 		level:      conLevel,
 		wantsHTTPS: u.Scheme == "https",
-		cluster:    Cluster{leader: Peer{hostname: leaderHost, port: leaderPort}},
 	}
+	db.cluster = cluster{peers: []*peer{db.newPeer(leaderHost, leaderPort)}}
 
 	if err := db.updateClusterInfo(); err != nil {
 		return nil, err
@@ -102,46 +105,34 @@ func Open(dsn string) (*DB, error) {
 	return db, nil
 }
 
-func (db *DB) assembleURL(apiOp apiOperation, p Peer) string {
+func (db *DB) assembleURL(p *peer, apiOp apiOperation, opAtomic bool) string {
 	var sb strings.Builder
-	// TODO(br): Move this code to peer initialization, as it never changes during its lifecycle
 
-	if db.wantsHTTPS {
-		sb.WriteString("https://")
-	} else {
-		sb.WriteString("http://")
-	}
-
-	if db.user != "" {
-		sb.WriteString(db.user)
-		sb.WriteString(":")
-		sb.WriteString(db.password)
-		sb.WriteString("@")
-	}
-
-	sb.WriteString(p.hostname)
-	sb.WriteString(":")
-	sb.WriteString(p.port)
+	sb.WriteString(p.URL)
 
 	switch apiOp {
-	case apiSTATUS:
+	case opSTATUS:
 		sb.WriteString("/status")
-	case apiQUERY:
+	case opQUERY:
 		sb.WriteString("/db/query")
-	case apiWRITE:
-		sb.WriteString("/db/execute")
-	}
-
-	if apiOp == apiQUERY || apiOp == apiWRITE {
 		sb.WriteString("?timings&transaction&level=")
 		sb.WriteString(string(db.level))
+	case opEXECUTE:
+		sb.WriteString("/db/execute")
+		sb.WriteString("?timings&transaction&level=")
+		sb.WriteString(string(db.level))
+		if opAtomic {
+			sb.WriteString("&atomic")
+		}
+	default:
+		panic(fmt.Sprintf("unknown apiOperation %d", apiOp))
 	}
 
 	return sb.String()
 }
 
-func (db *DB) request(apiOP apiOperation, method string, p Peer, reqBody io.Reader) ([]byte, error) {
-	req, err := http.NewRequest(method, db.assembleURL(apiOP, p), reqBody)
+func (db *DB) request(apiOP apiOperation, opAtomic bool, method string, p *peer, reqBody io.Reader) ([]byte, error) {
+	req, err := http.NewRequest(method, db.assembleURL(p, apiOP, opAtomic), reqBody)
 	if err != nil {
 		return nil, err
 	}

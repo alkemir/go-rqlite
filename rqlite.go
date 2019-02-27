@@ -13,10 +13,11 @@ const (
 type apiOperation int
 
 const (
-	apiQUERY apiOperation = iota
-	apiSTATUS
-	apiWRITE
+	opQUERY apiOperation = iota
+	opSTATUS
+	opEXECUTE
 )
 
 var ErrNoPeers = errors.New("no peers on cluster")
 var ErrPeersUnavailable = errors.New("no peers available")
+var ErrLeaderNotFound = errors.New("could not determine leader from API status call")
