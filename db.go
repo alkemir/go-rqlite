@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// TODO(br): Check if we should update the cluster status on redirects or node failures.
-
 // DB represents a connection to a rqlite cluster
 type DB struct {
 	client     http.Client
@@ -22,8 +20,9 @@ type DB struct {
 	user       string
 	password   string
 
-	cluster   cluster
-	clusterMu sync.Mutex
+	cluster             cluster
+	shouldUpdateCluster bool
+	clusterMu           sync.Mutex
 
 	level consistencyLevel
 }
@@ -97,6 +96,12 @@ func Open(dsn string) (*DB, error) {
 		wantsHTTPS: u.Scheme == "https",
 	}
 	db.cluster = cluster{peers: []*peer{db.newPeer(leaderHost, leaderPort)}}
+	db.client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		db.clusterMu.Lock()
+		db.shouldUpdateCluster = true
+		db.clusterMu.Unlock()
+		return nil
+	}
 
 	if err := db.updateClusterInfo(); err != nil {
 		return nil, err
@@ -150,8 +155,18 @@ func (db *DB) request(apiOP apiOperation, opAtomic bool, method string, p *peer,
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println(string(responseBody))
 		return nil, fmt.Errorf("status code: %d", resp.StatusCode)
+	}
+
+	clusterChanged := false
+	db.clusterMu.Lock()
+	if db.shouldUpdateCluster {
+		clusterChanged = true
+		db.shouldUpdateCluster = false
+	}
+	db.clusterMu.Unlock()
+	if clusterChanged {
+		db.updateClusterInfo()
 	}
 
 	return responseBody, nil
