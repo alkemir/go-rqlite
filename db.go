@@ -103,7 +103,7 @@ func Open(dsn string) (*DB, error) {
 		return nil
 	}
 
-	if err := db.updateClusterInfo(); err != nil {
+	if err := db.UpdateClusterInfo(); err != nil {
 		return nil, err
 	}
 
@@ -166,7 +166,7 @@ func (db *DB) request(apiOP apiOperation, opAtomic bool, method string, p *peer,
 	}
 	db.clusterMu.Unlock()
 	if clusterChanged {
-		db.updateClusterInfo()
+		db.UpdateClusterInfo()
 	}
 
 	return responseBody, nil

@@ -11,14 +11,14 @@ type cluster struct {
 	peers []*peer // leader first
 }
 
-func (db *DB) PeerList() []*peer {
+func (db *DB) peers() []*peer {
 	db.clusterMu.Lock()
 	pp := db.cluster.peers
 	db.clusterMu.Unlock()
 	return pp
 }
 
-func (db *DB) updateClusterInfo() error {
+func (db *DB) UpdateClusterInfo() error {
 	status, err := db.Status()
 	if err != nil {
 		return err
@@ -138,7 +138,7 @@ type Sqlite3Status struct {
 }
 
 func (db *DB) Status() (*ClusterStatus, error) {
-	pp := db.PeerList()
+	pp := db.peers()
 	if len(pp) < 1 {
 		return nil, ErrNoPeers
 	}

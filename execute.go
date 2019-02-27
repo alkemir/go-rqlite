@@ -46,7 +46,7 @@ func (db *DB) execute(sqlStatements []string, opAtomic bool) (*ExecuteResponse, 
 		return nil, err
 	}
 
-	pp := db.PeerList()
+	pp := db.peers()
 	if len(pp) < 1 {
 		return nil, ErrNoPeers
 	}

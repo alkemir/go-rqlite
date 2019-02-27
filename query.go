@@ -32,7 +32,7 @@ func (db *DB) Query(sqlStatements []string) (*QueryResponse, error) {
 		return nil, err
 	}
 
-	pp := db.PeerList()
+	pp := db.peers()
 	if len(pp) < 1 {
 		return nil, ErrNoPeers
 	}
